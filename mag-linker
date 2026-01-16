@@ -68,6 +68,14 @@
             <div id="loader" class="animate-spin rounded-full h-4 w-4 border-2 border-red-600 border-t-transparent"></div>
         </div>
 
+        <!-- Missing Issues Report -->
+        <div id="missingReport" class="hidden mb-8 p-6 bg-red-950/20 border border-red-900/50 rounded-xl">
+            <h2 class="text-red-500 text-xs font-black uppercase tracking-[0.2em] mb-3">Gap Analysis: Missing Issues (001-277)</h2>
+            <div id="missingList" class="text-red-400 font-mono text-xs flex flex-wrap gap-2">
+                <!-- Missing numbers go here -->
+            </div>
+        </div>
+
         <div id="resultsContainer" class="hidden space-y-3">
             <div class="grid grid-cols-12 gap-4 px-4 py-2 text-[10px] font-black text-zinc-600 uppercase tracking-[0.2em]">
                 <div class="col-span-8 md:col-span-10">Magazine Issue</div>
@@ -101,21 +109,32 @@
         const resultsContainer = document.getElementById('resultsContainer');
         const emptyState = document.getElementById('emptyState');
         const searchBox = document.getElementById('searchBox');
+        const missingReport = document.getElementById('missingReport');
+        const missingList = document.getElementById('missingList');
 
         let allGroupedIssues = [];
 
         scanBtn.addEventListener('click', startScan);
         searchBox.addEventListener('input', (e) => renderList(e.target.value));
 
+        function formatBytes(bytes, decimals = 1) {
+            if (!+bytes) return '0 B';
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+        }
+
         async function startScan() {
             scanBtn.disabled = true;
             statusArea.classList.remove('hidden');
             emptyState.classList.add('hidden');
             resultsContainer.classList.remove('hidden');
+            missingReport.classList.add('hidden');
             
             try {
                 statusText.innerText = "Querying Archive.org for C&VG Collection";
-                // Narrowed query to strictly find the correct publication title order
                 const query = 'title:("Computer and Video Games" OR "Computer & Video Games") AND mediatype:(texts)';
                 const searchUrl = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(query)}&fl[]=identifier,title,downloads&rows=2000&output=json`;
 
@@ -124,13 +143,10 @@
                 const docs = data.response.docs;
 
                 const issueMap = new Map();
-                // Improved regex to capture issue numbers and exclude unrelated magazines
                 const issueRegex = /Issue\s*_?0*(\d+)([a-zA-Z]*)/i;
 
                 docs.forEach(doc => {
                     const title = doc.title || "";
-                    
-                    // Filter out "Video Games & Computer Entertainment" or "VG&CE"
                     const isVgaCe = /Video\s*Games\s*(&|and)\s*Computer/i.test(title);
                     if (isVgaCe) return;
 
@@ -155,6 +171,19 @@
                     key,
                     items: issueMap.get(key).sort((a, b) => b.downloads - a.downloads)
                 })).sort((a, b) => a.key.localeCompare(b.key));
+
+                const foundNumbers = new Set(allGroupedIssues.map(g => parseInt(g.key)));
+                const missing = [];
+                for (let i = 1; i <= 277; i++) {
+                    if (!foundNumbers.has(i)) {
+                        missing.push(i.toString().padStart(3, '0'));
+                    }
+                }
+
+                if (missing.length > 0) {
+                    missingList.innerHTML = missing.map(n => `<span>#${n}</span>`).join('');
+                    missingReport.classList.remove('hidden');
+                }
 
                 statusArea.classList.add('hidden');
                 searchBox.classList.remove('hidden');
@@ -188,11 +217,15 @@
 
                 if (pdfFile) {
                     const finalUrl = `https://archive.org/download/${identifier}/${pdfFile.name}`;
+                    const fileSize = pdfFile.size ? formatBytes(pdfFile.size) : 'Unknown Size';
                     
                     btn.outerHTML = `
-                        <a href="${finalUrl}" target="_blank" title="Download PDF" class="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded flex items-center justify-center transition-all group shadow-lg ml-auto">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 14l3 3m0 0l3-3m-3 3V10"></path></svg>
-                        </a>
+                        <div class="flex items-center gap-2 ml-auto">
+                            <span class="text-[9px] font-mono font-bold bg-zinc-800 text-zinc-400 px-2 py-1 rounded border border-zinc-700 uppercase tracking-tighter">${fileSize}</span>
+                            <a href="${finalUrl}" target="_blank" title="Download PDF" class="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded flex items-center justify-center transition-all group shadow-lg">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 14l3 3m0 0l3-3m-3 3V10"></path></svg>
+                            </a>
+                        </div>
                     `;
                 } else {
                     btn.innerText = "X";
