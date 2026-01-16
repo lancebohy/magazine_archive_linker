@@ -126,6 +126,16 @@
             return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
         }
 
+        function formatDate(dateString) {
+            if (!dateString) return 'Unknown Date';
+            try {
+                const date = new Date(dateString);
+                return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
+            } catch (e) {
+                return 'Invalid Date';
+            }
+        }
+
         async function startScan() {
             scanBtn.disabled = true;
             statusArea.classList.remove('hidden');
@@ -136,7 +146,8 @@
             try {
                 statusText.innerText = "Querying Archive.org for C&VG Collection";
                 const query = 'title:("Computer and Video Games" OR "Computer & Video Games") AND mediatype:(texts)';
-                const searchUrl = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(query)}&fl[]=identifier,title,downloads&rows=2000&output=json`;
+                // Added publicdate to the field list
+                const searchUrl = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(query)}&fl[]=identifier,title,downloads,publicdate&rows=2000&output=json`;
 
                 const response = await fetch(searchUrl);
                 const data = await response.json();
@@ -162,7 +173,8 @@
                         issueMap.get(key).push({
                             id: doc.identifier,
                             rawTitle: title,
-                            downloads: doc.downloads || 0
+                            downloads: doc.downloads || 0,
+                            publicDate: doc.publicdate
                         });
                     }
                 });
@@ -243,7 +255,6 @@
             const filtered = allGroupedIssues.filter(group => group.key.includes(lowerFilter));
 
             filtered.forEach(group => {
-                const main = group.items[0];
                 const allItems = group.items;
                 
                 const row = document.createElement('div');
@@ -253,11 +264,14 @@
 
                 const sourcesHtml = allItems.map((item, idx) => {
                     const subId = `verify-${item.id}-${idx}`;
+                    const displayDate = formatDate(item.publicDate);
                     return `
                     <div class="flex items-center justify-between p-3 bg-black/30 rounded-lg border border-zinc-800/50 group/item">
                         <div class="flex flex-col overflow-hidden mr-4">
                             <span class="text-zinc-400 text-[11px] font-medium truncate mb-0.5">${item.rawTitle}</span>
-                            <span class="text-zinc-600 text-[9px] font-mono uppercase tracking-widest">IA: ${item.id} • ${item.downloads.toLocaleString()} downloads</span>
+                            <span class="text-zinc-600 text-[9px] font-mono uppercase tracking-widest">
+                                IA: ${item.id} • Uploaded ${displayDate} • ${item.downloads.toLocaleString()} DLs
+                            </span>
                         </div>
                         <button id="${subId}" onclick="verifyLink('${item.id}', '${subId}')" class="shrink-0 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 py-1.5 text-[9px] font-black rounded transition-all uppercase tracking-widest border border-zinc-700">
                             Verify Source
