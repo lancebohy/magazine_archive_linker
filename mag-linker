@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>C&VG Magazine Archive Index</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { 
+            background-color: #09090b; 
+            color: #fafafa; 
+        }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #09090b; }
+        ::-webkit-scrollbar-thumb { background: #27272a; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+        
+        details > summary { list-style: none; }
+        details > summary::-webkit-details-marker { display: none; }
+
+        .loading-text::after {
+            content: '...';
+            animation: dots 1.5s steps(5, end) infinite;
+        }
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60% { content: '...'; }
+            80%, 100% { content: ''; }
+        }
+
+        .issue-card {
+            background-color: #111113;
+            border: 1px solid #27272a;
+            transition: all 0.2s ease;
+        }
+        .issue-card:hover {
+            border-color: #3f3f46;
+            background-color: #18181b;
+        }
+    </style>
+</head>
+<body class="min-h-screen font-sans antialiased">
+
+    <div class="max-w-5xl mx-auto p-6 md:p-12">
+        <header class="mb-12 border-b border-zinc-800 pb-8 flex flex-col md:flex-row md:items-end justify-between gap-6">
+            <div>
+                <h1 class="text-4xl font-black text-white tracking-tighter uppercase italic">C&VG Archive Index</h1>
+                <p class="text-zinc-500 mt-2 font-medium">Computer & Video Games Magazine • 1981—2004</p>
+            </div>
+            
+            <div class="flex flex-col sm:flex-row gap-3">
+                <input 
+                    type="text" 
+                    id="searchBox" 
+                    placeholder="Search issues (e.g. 093b)..." 
+                    class="hidden bg-zinc-900 border border-zinc-800 text-white px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-600 transition-all text-sm w-full sm:w-64"
+                >
+                <button id="scanBtn" class="bg-red-700 hover:bg-red-600 text-white px-6 py-2 rounded-lg font-bold text-sm shadow-lg transition-all flex items-center justify-center gap-2 active:scale-95">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                    Initialize Scanner
+                </button>
+            </div>
+        </header>
+
+        <div id="statusArea" class="hidden mb-8 bg-zinc-900 text-zinc-300 px-5 py-4 rounded-xl border border-zinc-800 flex items-center justify-between">
+            <span id="statusText" class="loading-text font-mono text-xs uppercase tracking-widest">Accessing Metadata API</span>
+            <div id="loader" class="animate-spin rounded-full h-4 w-4 border-2 border-red-600 border-t-transparent"></div>
+        </div>
+
+        <div id="resultsContainer" class="hidden space-y-3">
+            <div class="grid grid-cols-12 gap-4 px-4 py-2 text-[10px] font-black text-zinc-600 uppercase tracking-[0.2em]">
+                <div class="col-span-8 md:col-span-10">Magazine Issue</div>
+                <div class="col-span-4 md:col-span-2 text-right">Primary Source</div>
+            </div>
+            
+            <div id="issueList" class="space-y-3">
+                <!-- Generated Content -->
+            </div>
+        </div>
+        
+        <div id="emptyState" class="text-center py-32">
+            <div class="bg-zinc-900/50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 border border-zinc-800">
+                <svg class="w-8 h-8 text-zinc-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+            </div>
+            <h2 class="text-zinc-400 font-bold">Catalog Disconnected</h2>
+            <p class="text-zinc-600 text-sm mt-1">Click the red button to scan the Internet Archive for C&VG issues.</p>
+        </div>
+
+        <footer class="mt-20 py-8 border-t border-zinc-900 text-center">
+            <p class="text-[10px] text-zinc-600 uppercase tracking-widest font-bold">Direct API Connection • Filename Verification Protocol</p>
+        </footer>
+    </div>
+
+    <script>
+        const scanBtn = document.getElementById('scanBtn');
+        const statusArea = document.getElementById('statusArea');
+        const statusText = document.getElementById('statusText');
+        const loader = document.getElementById('loader');
+        const issueList = document.getElementById('issueList');
+        const resultsContainer = document.getElementById('resultsContainer');
+        const emptyState = document.getElementById('emptyState');
+        const searchBox = document.getElementById('searchBox');
+
+        let allGroupedIssues = [];
+
+        scanBtn.addEventListener('click', startScan);
+        searchBox.addEventListener('input', (e) => renderList(e.target.value));
+
+        async function startScan() {
+            scanBtn.disabled = true;
+            statusArea.classList.remove('hidden');
+            emptyState.classList.add('hidden');
+            resultsContainer.classList.remove('hidden');
+            
+            try {
+                statusText.innerText = "Querying Archive.org for C&VG Collection";
+                // Narrowed query to strictly find the correct publication title order
+                const query = 'title:("Computer and Video Games" OR "Computer & Video Games") AND mediatype:(texts)';
+                const searchUrl = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(query)}&fl[]=identifier,title,downloads&rows=2000&output=json`;
+
+                const response = await fetch(searchUrl);
+                const data = await response.json();
+                const docs = data.response.docs;
+
+                const issueMap = new Map();
+                // Improved regex to capture issue numbers and exclude unrelated magazines
+                const issueRegex = /Issue\s*_?0*(\d+)([a-zA-Z]*)/i;
+
+                docs.forEach(doc => {
+                    const title = doc.title || "";
+                    
+                    // Filter out "Video Games & Computer Entertainment" or "VG&CE"
+                    const isVgaCe = /Video\s*Games\s*(&|and)\s*Computer/i.test(title);
+                    if (isVgaCe) return;
+
+                    const match = title.match(issueRegex);
+                    if (match) {
+                        const number = match[1];
+                        const suffix = match[2] ? match[2].toLowerCase() : "";
+                        const key = `${number.padStart(3, '0')}${suffix}`;
+                        
+                        if (parseInt(number) > 400) return;
+
+                        if (!issueMap.has(key)) issueMap.set(key, []);
+                        issueMap.get(key).push({
+                            id: doc.identifier,
+                            rawTitle: title,
+                            downloads: doc.downloads || 0
+                        });
+                    }
+                });
+
+                allGroupedIssues = Array.from(issueMap.keys()).map(key => ({
+                    key,
+                    items: issueMap.get(key).sort((a, b) => b.downloads - a.downloads)
+                })).sort((a, b) => a.key.localeCompare(b.key));
+
+                statusArea.classList.add('hidden');
+                searchBox.classList.remove('hidden');
+                scanBtn.innerHTML = "Rescan Catalog";
+                scanBtn.disabled = false;
+                renderList();
+
+            } catch (error) {
+                statusText.innerText = "Error: " + error.message;
+                loader.classList.add('hidden');
+            }
+        }
+
+        async function verifyLink(identifier, elementId) {
+            const btn = document.getElementById(elementId);
+            const originalContent = btn.innerHTML;
+            btn.innerHTML = `<svg class="w-4 h-4 animate-spin mx-auto" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+            btn.disabled = true;
+
+            try {
+                const metaUrl = `https://archive.org/metadata/${identifier}/files`;
+                const response = await fetch(metaUrl);
+                const data = await response.json();
+                
+                const files = data.result || [];
+                const pdfFile = files.find(f => 
+                    f.name.toLowerCase().endsWith('.pdf') && 
+                    !f.name.toLowerCase().includes('_archive.pdf') &&
+                    !f.name.toLowerCase().includes('_text.pdf')
+                ) || files.find(f => f.name.toLowerCase().endsWith('.pdf'));
+
+                if (pdfFile) {
+                    const finalUrl = `https://archive.org/download/${identifier}/${pdfFile.name}`;
+                    
+                    btn.outerHTML = `
+                        <a href="${finalUrl}" target="_blank" title="Download PDF" class="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded flex items-center justify-center transition-all group shadow-lg ml-auto">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 14l3 3m0 0l3-3m-3 3V10"></path></svg>
+                        </a>
+                    `;
+                } else {
+                    btn.innerText = "X";
+                    btn.className = "text-red-500 text-[10px] font-bold";
+                }
+            } catch (e) {
+                btn.innerHTML = originalContent;
+                btn.disabled = false;
+            }
+        }
+
+        function renderList(filter = "") {
+            issueList.innerHTML = "";
+            const lowerFilter = filter.toLowerCase();
+            const filtered = allGroupedIssues.filter(group => group.key.includes(lowerFilter));
+
+            filtered.forEach(group => {
+                const main = group.items[0];
+                const allItems = group.items;
+                
+                const row = document.createElement('div');
+                row.className = "issue-card p-5 rounded-xl flex flex-col gap-4";
+                
+                const cleanTitle = `Computer & Video Games #${group.key}`;
+
+                const sourcesHtml = allItems.map((item, idx) => {
+                    const subId = `verify-${item.id}-${idx}`;
+                    return `
+                    <div class="flex items-center justify-between p-3 bg-black/30 rounded-lg border border-zinc-800/50 group/item">
+                        <div class="flex flex-col overflow-hidden mr-4">
+                            <span class="text-zinc-400 text-[11px] font-medium truncate mb-0.5">${item.rawTitle}</span>
+                            <span class="text-zinc-600 text-[9px] font-mono uppercase tracking-widest">IA: ${item.id} • ${item.downloads.toLocaleString()} downloads</span>
+                        </div>
+                        <button id="${subId}" onclick="verifyLink('${item.id}', '${subId}')" class="shrink-0 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 py-1.5 text-[9px] font-black rounded transition-all uppercase tracking-widest border border-zinc-700">
+                            Verify Source
+                        </button>
+                    </div>`;
+                }).join('');
+
+                row.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-zinc-100 font-black text-lg md:text-xl tracking-tighter uppercase italic">
+                            ${cleanTitle}
+                        </h3>
+                        <div class="bg-zinc-900 px-2 py-1 rounded text-[10px] font-mono text-zinc-500 border border-zinc-800">
+                            ${allItems.length} Version${allItems.length > 1 ? 's' : ''}
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        <div class="text-[9px] font-black text-zinc-700 uppercase tracking-widest mb-1">Available Archive Entries</div>
+                        ${sourcesHtml}
+                    </div>`;
+                issueList.appendChild(row);
+            });
+        }
+    </script>
+</body>
+</html>
