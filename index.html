@@ -15,9 +15,6 @@
         ::-webkit-scrollbar-thumb { background: #27272a; border-radius: 10px; }
         ::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
         
-        details > summary { list-style: none; }
-        details > summary::-webkit-details-marker { display: none; }
-
         .loading-text::after {
             content: '...';
             animation: dots 1.5s steps(5, end) infinite;
@@ -70,7 +67,7 @@
 
         <!-- Missing Issues Report -->
         <div id="missingReport" class="hidden mb-8 p-6 bg-red-950/20 border border-red-900/50 rounded-xl">
-            <h2 class="text-red-500 text-xs font-black uppercase tracking-[0.2em] mb-3">Gap Analysis: Missing Issues (001-277)</h2>
+            <h2 id="missingHeading" class="text-red-500 text-xs font-black uppercase tracking-[0.2em] mb-3">Gap Analysis</h2>
             <div id="missingList" class="text-red-400 font-mono text-xs flex flex-wrap gap-2">
                 <!-- Missing numbers go here -->
             </div>
@@ -87,12 +84,68 @@
             </div>
         </div>
         
-        <div id="emptyState" class="text-center py-32">
-            <div class="bg-zinc-900/50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 border border-zinc-800">
-                <svg class="w-8 h-8 text-zinc-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+        <!-- Instructions / Manual -->
+        <div id="emptyState" class="py-4">
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-12">
+                <div class="md:col-span-3 space-y-8">
+                    <div>
+                        <h2 class="text-2xl font-black text-white uppercase tracking-tight mb-4">Operator Manual</h2>
+                        <p class="text-zinc-400 leading-relaxed max-w-prose text-sm">
+                            This application is a live metadata aggregator for the <span class="text-white">C&VG Digital Archive</span>. It is designed to audit thousands of files across the Internet Archive to help collectors identify missing issues and find high-quality PDF copies.
+                        </p>
+                    </div>
+
+                    <div class="space-y-6">
+                        <div class="flex gap-4">
+                            <div class="flex-shrink-0 w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-bold text-zinc-100">1</div>
+                            <div>
+                                <h4 class="text-sm font-bold text-zinc-200 uppercase tracking-wide">Initialize Scan</h4>
+                                <p class="text-xs text-zinc-500 mt-1">Click the red button above to ping the Internet Archive API. This will build a live map of every issue available.</p>
+                            </div>
+                        </div>
+
+                        <div class="flex gap-4">
+                            <div class="flex-shrink-0 w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-bold text-zinc-100">2</div>
+                            <div>
+                                <h4 class="text-sm font-bold text-zinc-200 uppercase tracking-wide">Gap Analysis</h4>
+                                <p class="text-xs text-zinc-500 mt-1">Once the scan completes, a red panel will appear showing exactly how many issues are missing from the known sequence.</p>
+                            </div>
+                        </div>
+
+                        <div class="flex gap-4">
+                            <div class="flex-shrink-0 w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-bold text-zinc-100">3</div>
+                            <div>
+                                <h4 class="text-sm font-bold text-zinc-200 uppercase tracking-wide">Verify & Download</h4>
+                                <p class="text-xs text-zinc-500 mt-1">Use the "Verify Source" button on any entry to check the real-time file size and unlock the direct PDF download link.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="md:col-span-2">
+                    <div class="bg-zinc-900/50 border border-zinc-800 p-6 rounded-2xl">
+                        <h3 class="text-xs font-black text-zinc-500 uppercase tracking-widest mb-4">Quick Technical Specs</h3>
+                        <ul class="space-y-3">
+                            <li class="flex justify-between text-[11px] border-b border-zinc-800 pb-2">
+                                <span class="text-zinc-500">Source API</span>
+                                <span class="text-zinc-300 font-mono">Archive.org v1</span>
+                            </li>
+                            <li class="flex justify-between text-[11px] border-b border-zinc-800 pb-2">
+                                <span class="text-zinc-500">Target Range</span>
+                                <span class="text-zinc-300 font-mono">Issue 001 - 277</span>
+                            </li>
+                            <li class="flex justify-between text-[11px] border-b border-zinc-800 pb-2">
+                                <span class="text-zinc-500">Scan Depth</span>
+                                <span class="text-zinc-300 font-mono">2000 Records</span>
+                            </li>
+                            <li class="flex justify-between text-[11px]">
+                                <span class="text-zinc-500">Verification</span>
+                                <span class="text-zinc-300 font-mono">Direct PDF Only</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
             </div>
-            <h2 class="text-zinc-400 font-bold">Catalog Disconnected</h2>
-            <p class="text-zinc-600 text-sm mt-1">Click the red button to scan the Internet Archive for C&VG issues.</p>
         </div>
 
         <footer class="mt-20 py-8 border-t border-zinc-900 text-center">
@@ -111,6 +164,7 @@
         const searchBox = document.getElementById('searchBox');
         const missingReport = document.getElementById('missingReport');
         const missingList = document.getElementById('missingList');
+        const missingHeading = document.getElementById('missingHeading');
 
         let allGroupedIssues = [];
 
@@ -146,7 +200,6 @@
             try {
                 statusText.innerText = "Querying Archive.org for C&VG Collection";
                 const query = 'title:("Computer and Video Games" OR "Computer & Video Games") AND mediatype:(texts)';
-                // Added publicdate to the field list
                 const searchUrl = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(query)}&fl[]=identifier,title,downloads,publicdate&rows=2000&output=json`;
 
                 const response = await fetch(searchUrl);
@@ -166,7 +219,6 @@
                         const number = match[1];
                         const suffix = match[2] ? match[2].toLowerCase() : "";
                         const key = `${number.padStart(3, '0')}${suffix}`;
-                        
                         if (parseInt(number) > 400) return;
 
                         if (!issueMap.has(key)) issueMap.set(key, []);
@@ -184,15 +236,17 @@
                     items: issueMap.get(key).sort((a, b) => b.downloads - a.downloads)
                 })).sort((a, b) => a.key.localeCompare(b.key));
 
+                const targetCount = 277;
                 const foundNumbers = new Set(allGroupedIssues.map(g => parseInt(g.key)));
                 const missing = [];
-                for (let i = 1; i <= 277; i++) {
+                for (let i = 1; i <= targetCount; i++) {
                     if (!foundNumbers.has(i)) {
                         missing.push(i.toString().padStart(3, '0'));
                     }
                 }
 
                 if (missing.length > 0) {
+                    missingHeading.innerText = `Missing ${missing.length} out of ${targetCount} known issues`;
                     missingList.innerHTML = missing.map(n => `<span>#${n}</span>`).join('');
                     missingReport.classList.remove('hidden');
                 }
@@ -205,7 +259,7 @@
 
             } catch (error) {
                 statusText.innerText = "Error: " + error.message;
-                loader.classList.add('hidden');
+                console.error(error);
             }
         }
 
@@ -229,18 +283,18 @@
 
                 if (pdfFile) {
                     const finalUrl = `https://archive.org/download/${identifier}/${pdfFile.name}`;
-                    const fileSize = pdfFile.size ? formatBytes(pdfFile.size) : 'Unknown Size';
+                    const fileSize = pdfFile.size ? formatBytes(pdfFile.size) : 'Size N/A';
                     
                     btn.outerHTML = `
                         <div class="flex items-center gap-2 ml-auto">
                             <span class="text-[9px] font-mono font-bold bg-zinc-800 text-zinc-400 px-2 py-1 rounded border border-zinc-700 uppercase tracking-tighter">${fileSize}</span>
-                            <a href="${finalUrl}" target="_blank" title="Download PDF" class="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded flex items-center justify-center transition-all group shadow-lg">
+                            <a href="${finalUrl}" target="_blank" class="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded flex items-center justify-center transition-all group shadow-lg">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 14l3 3m0 0l3-3m-3 3V10"></path></svg>
                             </a>
                         </div>
                     `;
                 } else {
-                    btn.innerText = "X";
+                    btn.innerText = "NO PDF";
                     btn.className = "text-red-500 text-[10px] font-bold";
                 }
             } catch (e) {
@@ -255,14 +309,10 @@
             const filtered = allGroupedIssues.filter(group => group.key.includes(lowerFilter));
 
             filtered.forEach(group => {
-                const allItems = group.items;
-                
                 const row = document.createElement('div');
                 row.className = "issue-card p-5 rounded-xl flex flex-col gap-4";
                 
-                const cleanTitle = `Computer & Video Games #${group.key}`;
-
-                const sourcesHtml = allItems.map((item, idx) => {
+                const sourcesHtml = group.items.map((item, idx) => {
                     const subId = `verify-${item.id}-${idx}`;
                     const displayDate = formatDate(item.publicDate);
                     return `
@@ -270,7 +320,7 @@
                         <div class="flex flex-col overflow-hidden mr-4">
                             <span class="text-zinc-400 text-[11px] font-medium truncate mb-0.5">${item.rawTitle}</span>
                             <span class="text-zinc-600 text-[9px] font-mono uppercase tracking-widest">
-                                IA: ${item.id} • Uploaded ${displayDate} • ${item.downloads.toLocaleString()} DLs
+                                IA: ${item.id} • ${displayDate} • ${item.downloads.toLocaleString()} DLs
                             </span>
                         </div>
                         <button id="${subId}" onclick="verifyLink('${item.id}', '${subId}')" class="shrink-0 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 py-1.5 text-[9px] font-black rounded transition-all uppercase tracking-widest border border-zinc-700">
@@ -282,10 +332,10 @@
                 row.innerHTML = `
                     <div class="flex items-center justify-between">
                         <h3 class="text-zinc-100 font-black text-lg md:text-xl tracking-tighter uppercase italic">
-                            ${cleanTitle}
+                            Computer & Video Games #${group.key}
                         </h3>
                         <div class="bg-zinc-900 px-2 py-1 rounded text-[10px] font-mono text-zinc-500 border border-zinc-800">
-                            ${allItems.length} Version${allItems.length > 1 ? 's' : ''}
+                            ${group.items.length} Version${group.items.length > 1 ? 's' : ''}
                         </div>
                     </div>
                     <div class="space-y-2">
