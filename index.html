@@ -61,16 +61,13 @@
         </header>
 
         <div id="statusArea" class="hidden mb-8 bg-zinc-900 text-zinc-300 px-5 py-4 rounded-xl border border-zinc-800 flex items-center justify-between">
-            <span id="statusText" class="loading-text font-mono text-xs uppercase tracking-widest">Accessing Metadata API</span>
+            <span id="statusText" class="loading-text font-mono text-xs uppercase tracking-widest text-red-500">Accessing Metadata API</span>
             <div id="loader" class="animate-spin rounded-full h-4 w-4 border-2 border-red-600 border-t-transparent"></div>
         </div>
 
-        <!-- Missing Issues Report -->
         <div id="missingReport" class="hidden mb-8 p-6 bg-red-950/20 border border-red-900/50 rounded-xl">
             <h2 id="missingHeading" class="text-red-500 text-xs font-black uppercase tracking-[0.2em] mb-3">Gap Analysis</h2>
-            <div id="missingList" class="text-red-400 font-mono text-xs flex flex-wrap gap-2">
-                <!-- Missing numbers go here -->
-            </div>
+            <div id="missingList" class="text-red-400 font-mono text-xs flex flex-wrap gap-2"></div>
         </div>
 
         <div id="resultsContainer" class="hidden space-y-3">
@@ -78,13 +75,9 @@
                 <div class="col-span-8 md:col-span-10">Magazine Issue</div>
                 <div class="col-span-4 md:col-span-2 text-right">Primary Source</div>
             </div>
-            
-            <div id="issueList" class="space-y-3">
-                <!-- Generated Content -->
-            </div>
+            <div id="issueList" class="space-y-3"></div>
         </div>
         
-        <!-- Instructions / Manual -->
         <div id="emptyState" class="py-4">
             <div class="grid grid-cols-1 md:grid-cols-5 gap-12">
                 <div class="md:col-span-3 space-y-8">
@@ -100,7 +93,7 @@
                             <div class="flex-shrink-0 w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-bold text-zinc-100">1</div>
                             <div>
                                 <h4 class="text-sm font-bold text-zinc-200 uppercase tracking-wide">Initialize Scan</h4>
-                                <p class="text-xs text-zinc-500 mt-1">Click the red button above to ping the Internet Archive API. This will build a live map of every issue available.</p>
+                                <p class="text-xs text-zinc-500 mt-1">Click the red button above to ping the Internet Archive API. This now searches for all naming variations including C+VG and C&VG.</p>
                             </div>
                         </div>
 
@@ -136,7 +129,7 @@
                             </li>
                             <li class="flex justify-between text-[11px] border-b border-zinc-800 pb-2">
                                 <span class="text-zinc-500">Scan Depth</span>
-                                <span class="text-zinc-300 font-mono">2000 Records</span>
+                                <span class="text-zinc-300 font-mono">3000 Records</span>
                             </li>
                             <li class="flex justify-between text-[11px]">
                                 <span class="text-zinc-500">Verification</span>
@@ -147,17 +140,12 @@
                 </div>
             </div>
         </div>
-
-        <footer class="mt-20 py-8 border-t border-zinc-900 text-center">
-            <p class="text-[10px] text-zinc-600 uppercase tracking-widest font-bold">Direct API Connection • Filename Verification Protocol</p>
-        </footer>
     </div>
 
     <script>
         const scanBtn = document.getElementById('scanBtn');
         const statusArea = document.getElementById('statusArea');
         const statusText = document.getElementById('statusText');
-        const loader = document.getElementById('loader');
         const issueList = document.getElementById('issueList');
         const resultsContainer = document.getElementById('resultsContainer');
         const emptyState = document.getElementById('emptyState');
@@ -171,15 +159,6 @@
         scanBtn.addEventListener('click', startScan);
         searchBox.addEventListener('input', (e) => renderList(e.target.value));
 
-        function formatBytes(bytes, decimals = 1) {
-            if (!+bytes) return '0 B';
-            const k = 1024;
-            const dm = decimals < 0 ? 0 : decimals;
-            const sizes = ['B', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
-        }
-
         function formatDate(dateString) {
             if (!dateString) return 'Unknown Date';
             try {
@@ -187,6 +166,25 @@
                 return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
             } catch (e) {
                 return 'Invalid Date';
+            }
+        }
+
+        async function fetchWithRetry(url, retries = 5, backoff = 1000) {
+            try {
+                const response = await fetch(url);
+                if (response.status === 429 || response.status >= 500) {
+                    if (retries > 0) {
+                        await new Promise(res => setTimeout(res, backoff));
+                        return fetchWithRetry(url, retries - 1, backoff * 2);
+                    }
+                }
+                return await response.json();
+            } catch (err) {
+                if (retries > 0) {
+                    await new Promise(res => setTimeout(res, backoff));
+                    return fetchWithRetry(url, retries - 1, backoff * 2);
+                }
+                throw err;
             }
         }
 
@@ -198,36 +196,41 @@
             missingReport.classList.add('hidden');
             
             try {
-                statusText.innerText = "Querying Archive.org for C&VG Collection";
-                const query = 'title:("Computer and Video Games" OR "Computer & Video Games") AND mediatype:(texts)';
-                const searchUrl = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(query)}&fl[]=identifier,title,downloads,publicdate&rows=2000&output=json`;
+                statusText.innerText = "Initiating Multi-Variation Archive Scan";
+                
+                const queryParts = [
+                    'title:("Computer and Video Games" OR "Computer & Video Games" OR "C+VG" OR "C&VG" OR "CandVG")',
+                    'mediatype:(texts)'
+                ];
+                const query = queryParts.join(' AND ');
+                const searchUrl = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(query)}&fl[]=identifier,title,downloads,publicdate&rows=3000&output=json`;
 
-                const response = await fetch(searchUrl);
-                const data = await response.json();
-                const docs = data.response.docs;
+                const data = await fetchWithRetry(searchUrl);
+                const docs = data.response.docs || [];
 
                 const issueMap = new Map();
-                const issueRegex = /Issue\s*_?0*(\d+)([a-zA-Z]*)/i;
+                const issueRegex = /(?:Issue\s*|#\s*|CVG\s*(?:Issue\s*)?|No\.\s*|Vol\.\s*|0+|(?:\s|^))(\d{1,3})([a-zA-Z]{0,1})(?:\s|\.|$|:|_)/i;
 
                 docs.forEach(doc => {
                     const title = doc.title || "";
-                    const isVgaCe = /Video\s*Games\s*(&|and)\s*Computer/i.test(title);
-                    if (isVgaCe) return;
+                    if (/Video\s*Games\s*(&|and)\s*Computer/i.test(title)) return; 
 
                     const match = title.match(issueRegex);
                     if (match) {
                         const number = match[1];
                         const suffix = match[2] ? match[2].toLowerCase() : "";
-                        const key = `${number.padStart(3, '0')}${suffix}`;
-                        if (parseInt(number) > 400) return;
-
-                        if (!issueMap.has(key)) issueMap.set(key, []);
-                        issueMap.get(key).push({
-                            id: doc.identifier,
-                            rawTitle: title,
-                            downloads: doc.downloads || 0,
-                            publicDate: doc.publicdate
-                        });
+                        const numVal = parseInt(number);
+                        
+                        if (numVal > 0 && numVal <= 400) {
+                            const key = `${number.padStart(3, '0')}${suffix}`;
+                            if (!issueMap.has(key)) issueMap.set(key, []);
+                            issueMap.get(key).push({
+                                id: doc.identifier,
+                                rawTitle: title,
+                                downloads: doc.downloads || 0,
+                                publicDate: doc.publicdate
+                            });
+                        }
                     }
                 });
 
@@ -246,34 +249,34 @@
                 }
 
                 if (missing.length > 0) {
-                    missingHeading.innerText = `Missing ${missing.length} out of ${targetCount} known issues`;
-                    missingList.innerHTML = missing.map(n => `<span>#${n}</span>`).join('');
+                    missingHeading.innerText = `Gap Analysis: ${missing.length} Issues Missing (Target: 277)`;
+                    missingList.innerHTML = missing.map(n => `<span class="bg-red-900/40 px-2 py-0.5 rounded">#${n}</span>`).join('');
+                    missingReport.classList.remove('hidden');
+                } else {
+                    missingHeading.innerText = `Archive Complete (277/277)`;
                     missingReport.classList.remove('hidden');
                 }
 
                 statusArea.classList.add('hidden');
                 searchBox.classList.remove('hidden');
-                scanBtn.innerHTML = "Rescan Catalog";
+                scanBtn.innerHTML = "Update Catalog";
                 scanBtn.disabled = false;
                 renderList();
 
             } catch (error) {
-                statusText.innerText = "Error: " + error.message;
-                console.error(error);
+                statusText.innerText = "API Busy: Retrying connection...";
+                setTimeout(() => startScan(), 5000);
             }
         }
 
         async function verifyLink(identifier, elementId) {
             const btn = document.getElementById(elementId);
-            const originalContent = btn.innerHTML;
-            btn.innerHTML = `<svg class="w-4 h-4 animate-spin mx-auto" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+            btn.innerHTML = `<span class="animate-pulse">...</span>`;
             btn.disabled = true;
 
             try {
                 const metaUrl = `https://archive.org/metadata/${identifier}/files`;
-                const response = await fetch(metaUrl);
-                const data = await response.json();
-                
+                const data = await fetchWithRetry(metaUrl);
                 const files = data.result || [];
                 const pdfFile = files.find(f => 
                     f.name.toLowerCase().endsWith('.pdf') && 
@@ -283,22 +286,13 @@
 
                 if (pdfFile) {
                     const finalUrl = `https://archive.org/download/${identifier}/${pdfFile.name}`;
-                    const fileSize = pdfFile.size ? formatBytes(pdfFile.size) : 'Size N/A';
-                    
-                    btn.outerHTML = `
-                        <div class="flex items-center gap-2 ml-auto">
-                            <span class="text-[9px] font-mono font-bold bg-zinc-800 text-zinc-400 px-2 py-1 rounded border border-zinc-700 uppercase tracking-tighter">${fileSize}</span>
-                            <a href="${finalUrl}" target="_blank" class="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded flex items-center justify-center transition-all group shadow-lg">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 14l3 3m0 0l3-3m-3 3V10"></path></svg>
-                            </a>
-                        </div>
-                    `;
+                    const size = pdfFile.size ? (pdfFile.size / (1024 * 1024)).toFixed(1) + ' MB' : 'Link';
+                    btn.outerHTML = `<a href="${finalUrl}" target="_blank" class="bg-blue-600 text-white px-4 py-1.5 rounded text-[10px] font-bold uppercase tracking-widest hover:bg-blue-500 transition-all shadow-lg">${size}</a>`;
                 } else {
                     btn.innerText = "NO PDF";
-                    btn.className = "text-red-500 text-[10px] font-bold";
                 }
             } catch (e) {
-                btn.innerHTML = originalContent;
+                btn.innerText = "RETRY";
                 btn.disabled = false;
             }
         }
@@ -313,35 +307,26 @@
                 row.className = "issue-card p-5 rounded-xl flex flex-col gap-4";
                 
                 const sourcesHtml = group.items.map((item, idx) => {
-                    const subId = `verify-${item.id}-${idx}`;
+                    const subId = `v-${item.id}-${idx}`;
                     const displayDate = formatDate(item.publicDate);
                     return `
-                    <div class="flex items-center justify-between p-3 bg-black/30 rounded-lg border border-zinc-800/50 group/item">
-                        <div class="flex flex-col overflow-hidden mr-4">
-                            <span class="text-zinc-400 text-[11px] font-medium truncate mb-0.5">${item.rawTitle}</span>
+                    <div class="flex items-center justify-between p-3 bg-black/30 rounded-lg border border-zinc-800/50">
+                        <div class="flex flex-col truncate mr-4">
+                            <span class="text-zinc-400 text-[11px] truncate mb-0.5">${item.rawTitle}</span>
                             <span class="text-zinc-600 text-[9px] font-mono uppercase tracking-widest">
                                 IA: ${item.id} • ${displayDate} • ${item.downloads.toLocaleString()} DLs
                             </span>
                         </div>
-                        <button id="${subId}" onclick="verifyLink('${item.id}', '${subId}')" class="shrink-0 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 py-1.5 text-[9px] font-black rounded transition-all uppercase tracking-widest border border-zinc-700">
-                            Verify Source
-                        </button>
+                        <button id="${subId}" onclick="verifyLink('${item.id}', '${subId}')" class="shrink-0 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 py-1.5 text-[9px] font-black rounded uppercase tracking-widest border border-zinc-700">Verify Source</button>
                     </div>`;
                 }).join('');
 
                 row.innerHTML = `
                     <div class="flex items-center justify-between">
-                        <h3 class="text-zinc-100 font-black text-lg md:text-xl tracking-tighter uppercase italic">
-                            Computer & Video Games #${group.key}
-                        </h3>
-                        <div class="bg-zinc-900 px-2 py-1 rounded text-[10px] font-mono text-zinc-500 border border-zinc-800">
-                            ${group.items.length} Version${group.items.length > 1 ? 's' : ''}
-                        </div>
+                        <h3 class="text-zinc-100 font-black text-lg uppercase italic tracking-tighter">Issue #${group.key}</h3>
+                        <div class="text-[10px] text-zinc-600 font-mono">${group.items.length} Match${group.items.length > 1 ? 'es' : ''}</div>
                     </div>
-                    <div class="space-y-2">
-                        <div class="text-[9px] font-black text-zinc-700 uppercase tracking-widest mb-1">Available Archive Entries</div>
-                        ${sourcesHtml}
-                    </div>`;
+                    <div class="space-y-2">${sourcesHtml}</div>`;
                 issueList.appendChild(row);
             });
         }
